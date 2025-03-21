@@ -25,7 +25,7 @@ class DataParser(object):
         self.valid_img_file = []
         self.img_files = []
 
-        data_split_dir = os.path.join(cfg.data_split, run_id)
+        data_split_dir = cfg.data_split
         if not os.path.exists(data_split_dir):
             os.makedirs(data_split_dir)
 
@@ -45,8 +45,13 @@ class DataParser(object):
             self.img_files = []
             for class_id in range(7):
                 samples = [img for img in img_dicts if img['label']==class_id]
+                print(f'samples from class {class_id}:{len(samples)}')
                 random.shuffle(samples)
-                self.img_files.extend(samples[:class_sample[class_id]])
+                # self.img_files.extend(samples[:class_sample[class_id]])
+                self.img_files.extend(samples)
+            # exit()
+            print(f'total samples:{len(self.img_files)}')
+            # exit()
             self.train_img_file, self.valid_img_file = self._split()
             #self.valid_img_file = self._load_harts_data(self.data_path, valid=True)
             pickle.dump(self.train_img_file, open(train_image_path, 'wb'))
@@ -126,6 +131,3 @@ class DataParser(object):
 if __name__=="__main__":
     run_started = datetime.today().strftime('%m-%d-%y_%H%M')
     parser = DataParser(cfg.data_path, run_id=run_started)
-    ##print(parser.classes_to_idx)
-    #print(len(parser.img_files))
-    ##print(parser.img_files[100])

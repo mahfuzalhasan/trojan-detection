@@ -1,10 +1,11 @@
 #training
 num_epoch = 500
-batch_size = 256
+batch_size = 512
 #resume = None #"/home/UFAD/mdmahfuzalhasan/Documents/Results/output_harts/saved_models/02-10-21_1341_msgan/00074.pth"
 resume = "/home/UFAD/mdmahfuzalhasan/Documents/Results/output_harts/saved_models/Classification/04-23-21_0814/model_7.pth"
 gpu = 2
 smoothing_value = 0.85
+device_ids = [0, 1]
 
 #test
 result_dir = "/home/UFAD/mdmahfuzalhasan/Documents/Results/output_harts/test_output"
@@ -34,8 +35,8 @@ scale_factor = 0.5
 isReduced = False
 
 
-#model related
-checkpoint = 1      #no of epoch to save model
+# model related
+checkpoint = 10      #no of epoch to save model
 
 #sem_image
 paths = ["Set39_D6_Cropped.tif"]

@@ -14,10 +14,10 @@ def write_img(visuals, run_id, ep, iteration, val=False ):
     if not os.path.exists(path):
         os.makedirs(path)
 
-    input_1 = '%s/input_aug_%05d.jpg' % (path, iteration)
-    input_2 = '%s/input_org_%05d.jpg' % (path, iteration)
+    input_2 = '%s/input_aug_%05d.jpg' % (path, iteration)
+    input_1 = '%s/input_org_%05d.jpg' % (path, iteration)
     anomaly = '%s/anomaly_%05d.jpg' % (path, iteration)
 
-    torchvision.utils.save_image(visuals['input_1'], input_1, normalize=True, nrow=8, range=(0, 1))
-    torchvision.utils.save_image(visuals['input_org'], input_2, normalize=True, nrow=8, range=(0, 1))
-    torchvision.utils.save_image(visuals['anomaly'], anomaly, normalize=True, nrow=8, range=(0, 1))
+    torchvision.utils.save_image(visuals['input_1'], input_2, normalize=True, nrow=8, value_range=(0, 1))
+    torchvision.utils.save_image(visuals['input_org'], input_1, normalize=True, nrow=8, value_range=(0, 1))
+    torchvision.utils.save_image(visuals['anomaly'], anomaly, normalize=True, nrow=8, value_range=(0, 1))

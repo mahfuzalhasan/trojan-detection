@@ -1,3 +1,6 @@
 data_classes/*
 Test_Data/*
 output_check/*
+Results/*
+*/__pycache__/*
+__pycache__/*

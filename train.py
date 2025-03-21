@@ -5,6 +5,7 @@ import math
 from datetime import datetime
 import time
 import sys
+import random
 
 from tensorboardX import SummaryWriter
 
@@ -36,10 +37,28 @@ import Config.parameters as params
 #from resnet import ResNet18
 #from model import Net
 #from model_cutpaste import CutPasteNet
-from model_simsiam_modified import SimSiam
+# from model_simsiam_modified import SimSiam
+from simsiam_small import SmallSimSiam
 
 
 device = torch.device('cuda:'+str(params.gpu))
+
+def save(run_id, model, epoch, optimizer, best=False):
+    save_dir = os.path.join(cfg.saved_models_dir, run_id)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+    if best:
+        save_file_path = os.path.join(save_dir, 'model_best.pth')
+    else:
+        save_file_path = os.path.join(save_dir, 'model_{}.pth'.format(epoch))
+
+    states = {
+        'epoch': epoch,
+        'state_dict': model.module.state_dict(),
+        'optimizer': optimizer.state_dict()
+    }
+    torch.save(states, save_file_path)
+
 
 # Training
 def train(run_id, use_cuda, epoch, train_dataloader, model,
@@ -72,12 +91,20 @@ def train(run_id, use_cuda, epoch, train_dataloader, model,
             ################
 
         optimizer.zero_grad()
+        
         p_org, p1, p_anom, z_org, z1, z_anom = model(img, aug_1, anom)
+        
+        p_org   = F.normalize(p_org, p=2, dim=1)
+        p1      = F.normalize(p1, p=2, dim=1)
+        p_anom  = F.normalize(p_anom, p=2, dim=1)
+        z_org   = F.normalize(z_org, p=2, dim=1)
+        z1      = F.normalize(z1, p=2, dim=1)
+        z_anom  = F.normalize(z_anom, p=2, dim=1)
+        
         sim_1 = (similarity_loss(p_org, z1).mean() + similarity_loss(p1, z_org).mean()) * 0.5 # between different view
-        #p3, p4, z3, z4 = model(img, anom)
         sim_2 = (similarity_loss(p_org, z_anom).mean() + similarity_loss(p_anom, z_org).mean()) * 0.5 # anomalous pair
 
-        loss = -(sim_1 - 0.5 * sim_2)
+        loss = -(sim_1 - sim_2)
         loss.backward()
         optimizer.step()
 
@@ -90,7 +117,7 @@ def train(run_id, use_cuda, epoch, train_dataloader, model,
         losses_1.append(sim_1.item())
         losses_2.append(sim_2.item())
 
-        if i%10 == 0:
+        if i%5 == 0:
             #batches_done = epoch * len(dataloader) + i
             print(
                 "[Epoch %d/%d] [Batch %d/%d] [loss: %f] [sim clean: %.3f] [sim anom: %.3f] "
@@ -102,19 +129,7 @@ def train(run_id, use_cuda, epoch, train_dataloader, model,
                                    ('anomaly', anom[0 : 64, :, :, :])])
 
             visualizer.write_img(visuals, run_id, epoch, i)
-
-    save_dir = os.path.join(cfg.saved_models_dir, run_id)
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-
-    if epoch % params.checkpoint == 0:
-        save_file_path = os.path.join(save_dir, 'model_{}.pth'.format(epoch))
-        states = {
-            'epoch': epoch,
-            'state_dict': model.state_dict(),
-            'optimizer': optimizer.state_dict(),
-        }
-        torch.save(states, save_file_path)
+    
 
     time_taken = time.time() - start_time
     print(f'Training Epoch {epoch}::: Total Loss:{np.mean(total_losses)} Clean Sample Sim:{np.mean(losses_1)} Anom Sample Sim:{np.mean(losses_2)} time taken:{time_taken}')
@@ -138,7 +153,7 @@ def validation(run_id, use_cuda, epoch, valid_dataloader, model, similarity_loss
     losses_2 = []
     start_time = time.time()
     accuracy = []
-
+        
     """ for param_group in optimizer.param_groups:
         print('Learning rate: ',param_group['lr']) """
     with torch.no_grad():
@@ -157,18 +172,25 @@ def validation(run_id, use_cuda, epoch, valid_dataloader, model, similarity_loss
 
             
             p_org, p1, p_anom, z_org, z1, z_anom = model(img, aug_1, anom)
+            
+            p_org   = F.normalize(p_org, p=2, dim=1)
+            p1      = F.normalize(p1, p=2, dim=1)
+            p_anom  = F.normalize(p_anom, p=2, dim=1)
+            z_org   = F.normalize(z_org, p=2, dim=1)
+            z1      = F.normalize(z1, p=2, dim=1)
+            z_anom  = F.normalize(z_anom, p=2, dim=1)
+            
             sim_1 = (similarity_loss(p_org, z1).mean() + similarity_loss(p1, z_org).mean()) * 0.5 # between different view
-            #p3, p4, z3, z4 = model(img, anom)
             sim_2 = (similarity_loss(p_org, z_anom).mean() + similarity_loss(p_anom, z_org).mean()) * 0.5 # anomalous pair
 
-            loss = -(sim_1 - 0.5 * sim_2)
+            loss = -(sim_1 - sim_2)
 
 
             total_losses.append(loss.item())
             losses_1.append(sim_1.item())
             losses_2.append(sim_2.item())
 
-            if i%4 == 0:
+            if i%5 == 0:
                 #batches_done = epoch * len(dataloader) + i
                 print(
                     "[Epoch %d/%d] [Batch %d/%d] [loss: %f] [sim clean: %.3f] [sim anom: %.3f] "
@@ -183,13 +205,14 @@ def validation(run_id, use_cuda, epoch, valid_dataloader, model, similarity_loss
 
 
     time_taken = time.time() - start_time
+    avg_loss = np.mean(total_losses)
     print(f'validation Epoch {epoch}::: Total Loss:{np.mean(total_losses)} Clean Sample Sim:{np.mean(losses_1)} Anom Sample Sim:{np.mean(losses_2)} time taken:{time_taken}')
     sys.stdout.flush()
 
     writer.add_scalar('Validation Total Loss', np.mean(total_losses), epoch)
     writer.add_scalar('Validation Clean Sim', np.mean(losses_1), epoch)
     writer.add_scalar('Validation Anomaly Sim', np.mean(losses_2), epoch)
-    #return model
+    return avg_loss
 
 def load_model(model, optimizer):
     if cfg.saved_model_path is not None:
@@ -202,10 +225,14 @@ def load_model(model, optimizer):
 
 def train_task(run_id, use_cuda):
     global device
-    writer = SummaryWriter(os.path.join(cfg.logs_dir, str(run_id)))
+    log_dir = os.path.join(cfg.logs_dir, str(run_id))
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+    writer = SummaryWriter(log_dir)
 
     #model = ResNet18( params.num_classes, params.num_channel)
-    model = SimSiam(models.__dict__['resnet18'])
+    model = SmallSimSiam(feature_dim=128, pred_dim=64)
     if use_cuda:
 
         #######To load in Single GPU
@@ -213,9 +240,14 @@ def train_task(run_id, use_cuda):
         #######
 
         #####To load in Multiple GPU. In FICS server we have 4 GPU. That's why 4 device ids here.
-        model = nn.DataParallel(model, device_ids = [0, 2, 3])
+        model = nn.DataParallel(model, device_ids = params.device_ids)
         model.to(f'cuda:{model.device_ids[0]}')
         ######
+
+    seed = 42  # You can choose any number
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
     data_parser = DataParser(cfg.data_path, run_id)
     train_dataset = CutPasteDataset(data_parser.train_img_file, run_id)
@@ -230,12 +262,21 @@ def train_task(run_id, use_cuda):
     optimizer = torch.optim.SGD(model.parameters(), lr=params.learning_rate, momentum=0.9, weight_decay=5e-4)
 
     #model, optimizer = load_model(model, optimizer)
-
+    best_loss = float('inf')
     for epoch in range(params.num_epoch):
         train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=params.batch_size, shuffle=True)
+        print(f'train dl:{len(train_dataloader)}')
         model = train(run_id, use_cuda, epoch, train_dataloader, model, optimizer, similarity_loss, writer)
-        valid_dataloader = torch.utils.data.DataLoader(valid_dataset, batch_size=params.batch_size, shuffle=False)
-        validation(run_id, use_cuda, epoch, valid_dataloader, model, similarity_loss, writer)
+        valid_dataloader = torch.utils.data.DataLoader(valid_dataset, batch_size=128, shuffle=False)
+        print(f'valid dl:{len(valid_dataloader)}')
+        val_loss = validation(run_id, use_cuda, epoch, valid_dataloader, model, similarity_loss, writer)
+        
+        if epoch % params.checkpoint == 0:
+            save(run_id, model, epoch, optimizer, best=False)
+        if val_loss < best_loss:
+            best_loss = val_loss
+            print(f'Best Val Epoch:{epoch}')
+            save(run_id, model, epoch, optimizer, best=True)
 
 
 if __name__=="__main__":
